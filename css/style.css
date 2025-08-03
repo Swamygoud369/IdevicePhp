@@ -1,0 +1,32 @@
+body{
+      /* font-family: "Nunito Sans", sans-serif; */
+  font-family: "Urbanist", sans-serif;
+
+}
+
+.main-logo {
+    max-height: 60px;
+}.footer-single-info-logo .footer-logo img {
+    max-height: 90px;
+}
+#toggle-theme {
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.dark-mode .white-logo, .dark-logo{
+    display: block;
+}
+.white-logo, .dark-mode .dark-logo{
+    display: none;
+}
+select.form-select.form-control {
+    padding: 10px 15px;
+}
+.modal-open .modal-backdrop.show {
+    opacity: 0.9;
+}
