@@ -14,7 +14,7 @@ $model_sql = "SELECT DISTINCT id, model_name FROM device_stockmodels";
 $model_result = $conn->query($model_sql);
 
 // Fetch all colors
-$color_sql = "SELECT DISTINCT color FROM device_stockmodels WHERE quantity > 0";
+$color_sql = "SELECT DISTINCT spare_id FROM device_stockmodels WHERE quantity > 0";
 $color_result = $conn->query($color_sql);
 
 
@@ -51,7 +51,7 @@ while ($row = $color_result->fetch_assoc()) {
             <select name="color[]" class="form-select form-control" required>
                 <option value="">Select Color</option>
                 <?php
-                $color_sql = "SELECT DISTINCT color FROM device_stockmodels";
+                $color_sql = "SELECT DISTINCT spare_id FROM device_stockmodels";
                 $color_result = $conn->query($color_sql);
                 while ($row = $color_result->fetch_assoc()) {
                     echo '<option value="'.$row['color'].'">'.$row['color'].'</option>';

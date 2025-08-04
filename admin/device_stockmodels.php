@@ -11,7 +11,7 @@ $selected_category_id = $_GET['category_id'] ?? null;
 // Handle Save (Insert or Update)
 if (isset($_POST['save_model'])) {
     $model_id = $_POST['smodel_id'];
-    $color_id = $_POST['color_id'];
+$spare_id = $_POST['spare_id'];
     $cid = $_POST['model_category_id'];
     $quantity = $_POST['model_quantity'];
     $price = $_POST['model_price'];
@@ -23,28 +23,27 @@ $outstanding = $quantity * $purchased_price;
 
 $model = '';
     if ($model_id) {
-        $res = $conn->query("SELECT model_name FROM models WHERE model_id = $model_id");
+        $res = $conn->query("SELECT model_name FROM device_models WHERE id = $model_id");
         $model = $res->fetch_assoc()['model_name'] ?? '';
     }
 
-    $color = '';
-    if ($color_id) {
-        $res = $conn->query("SELECT color_name FROM colors WHERE color_id = $color_id");
-        $color = $res->fetch_assoc()['color_name'] ?? '';
-    }
-
+    $spare = '';
+if ($spare_id) {
+    $res = $conn->query("SELECT spare_name FROM device_spares WHERE id = $spare_id");
+    $spare = $res->fetch_assoc()['spare_name'] ?? '';
+}
 if ($mid) {
     // UPDATE
     $stmt = $conn->prepare("UPDATE device_stockmodels 
-        SET model_name=?, color=?, quantity=?, price=?, purchased_price=?, party_id=?, outstanding_amount=? 
+        SET model_name=?, spare_id=?, quantity=?, price=?, purchased_price=?, party_id=?, outstanding_amount=? 
         WHERE id=?");
-    $stmt->bind_param("ssiddisi", $model, $color, $quantity, $price, $purchased_price, $party_id, $outstanding, $mid);
+    $stmt->bind_param("siiddiid", $model_id, $spare_id, $quantity, $price, $purchased_price, $party_id, $outstanding, $mid);
 } else {
     // INSERT - created_at handled automatically
     $stmt = $conn->prepare("INSERT INTO device_stockmodels 
-        (model_name, color, quantity, price, purchased_price, category_id, party_id, outstanding_amount) 
+        (model_name, spare_id, quantity, price, purchased_price, category_id, party_id, outstanding_amount) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("ssiddisi", $model, $color, $quantity, $price, $purchased_price, $cid, $party_id, $outstanding);
+    $stmt->bind_param("siiddiid", $model_id, $spare_id, $quantity, $price, $purchased_price, $cid, $party_id, $outstanding);
 }
 $stmt->execute();
 $stmt->close();
@@ -58,8 +57,14 @@ $stmt->close();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_model'])) {
     $id = intval($_POST['delete_model']);
     $conn->query("DELETE FROM device_stockmodels WHERE id = $id");
-    echo json_encode(['status' => 'success']);
-    exit;
+
+    if ($conn->query($sql) === TRUE) {
+        echo "success";
+    } else {
+        echo "error";
+    }
+ header("Location: ".$_SERVER['PHP_SELF']);
+    $conn->close();
 }
 
 // Handle Edit
@@ -106,7 +111,7 @@ if ($edit_id) {
                         </div>
                         <div class="col-md-4 mb-3">
   <label class="form-label">Party Name</label>
-  <select name="model_party_id" class="select form-control" required>
+  <select name="model_party_id" class="select2 form-control" required>
     <option value="">Select Party</option>
     <?php
     $party_res = $conn->query("SELECT * FROM stock_parties ORDER BY party_name");
@@ -118,30 +123,22 @@ if ($edit_id) {
   </select>
 </div>
 
-<!-- 
-<div class="col-md-4 mb-3">
-  <label class="form-label">Outstanding Amount</label>
-  <input type="text" step="0.01" name="model_outstanding" class="form-control" value="<?= $edit_model['outstanding_amount'] ?? '0.00' ?>">
-</div> -->
-
-                        <!-- <div class="col-md-4 mb-3">
-                            <label class="form-label">Model Name</label>
-                            <input type="text" name="model_name" class="form-control" required value="<?= $edit_model['model_name'] ?? '' ?>">
-                        </div> -->
                         <div class="col-md-4 mb-3">
   <label class="form-label w-100">Model Name <a href="#" class="float-end text-success fw-semibold" data-bs-toggle="modal" data-bs-target="#model_name">+ Add model Name</a></label>
-  <select name="smodel_id" id="modelSelect" class="form-select" required>
+  <select name="smodel_id" id="modelSelect" class="select2 form-select" required>
     <option value="">-- Select Model --</option>
   </select>
 </div>
 
                         <div class="col-md-4 mb-3">
-  <label class="form-label w-100">Spares
-    <a href="#" class="float-end text-success fw-semibold" data-bs-toggle="modal" data-bs-target="#colorModal">+ Add Spares</a>
-  </label>
-  <select name="color_id" id="colorSelect" class="form-select" required>
-    <option value="">-- Select Spares --</option>
-  </select>
+                          <label class="form-label w-100">Device Spares
+  <a href="#" class="float-end text-success fw-semibold" data-bs-toggle="modal" data-bs-target="#spareModal">+ Add Spare</a>
+</label>
+<select name="spare_id" id="spareSelect" class="select2 form-select" required>
+  <option value="">-- Select Spare --</option>
+</select>
+
+ 
 </div>
                           <div class="col-md-4 mb-3">
                             <label class="form-label">Quantity</label>
@@ -175,7 +172,7 @@ if ($edit_id) {
                                     <tr>
                                         <th>ID</th>
                                         <th>Model Name</th>
-                                        <th>Color</th>
+                                        <th>Spare</th>
                                         <th>Category</th>
                                         <th>Purchased Price</th>
                                         <th>Selling Price</th>
@@ -188,11 +185,28 @@ if ($edit_id) {
                                 </thead>
                                 <tbody>
                                     <?php
-                                    $sql = "SELECT m.id, m.model_name, m.color, m.price,m.purchased_price, m.quantity, m.created_at, m.outstanding_amount,
-               c.category_name, p.party_name
-                                            FROM device_stockmodels m 
-                                            JOIN device_categories c ON m.category_id = c.id
+                                    $sql = "SELECT 
+            m.id, 
+                dm.model_name AS model_name, 
+            m.quantity, 
+            m.price, 
+            m.purchased_price, 
+            m.created_at, 
+            m.outstanding_amount,
+            s.spare_name, 
+            c.category_name, 
+            p.party_name
+        FROM device_stockmodels m
+        LEFT JOIN device_models dm ON dm.id = m.model_name
+        LEFT JOIN device_spares s ON m.spare_id = s.id
+        JOIN device_categories c ON m.category_id = c.id
         LEFT JOIN stock_parties p ON m.party_id = p.id";
+
+        //                             $sql = "SELECT m.id, m.model_name, m.spare_id, m.price,m.purchased_price, m.quantity, m.created_at, m.outstanding_amount,
+        //        c.category_id, p.party_id
+        //                                     FROM device_stockmodels m 
+        //                                     JOIN device_categories c ON m.category_id = c.id
+        // LEFT JOIN stock_parties p ON m.party_id = p.id";
                                     if ($selected_category_id) {
                                         $sql .= " WHERE m.category_id = $selected_category_id";
                                     }
@@ -201,7 +215,7 @@ if ($edit_id) {
                                         echo "<tr>
                                                 <td>{$row['id']}</td>
                                                 <td>{$row['model_name']}</td>
-                                                <td>{$row['color']}</td>
+<td>{$row['spare_name']}</td>
                                                 <td>{$row['category_name']}</td>
                                                 <td>{$row['purchased_price']}</td>
 
@@ -229,26 +243,40 @@ if ($edit_id) {
     </div>
 </div>
 
-<div class="modal fade" id="colorModal" tabindex="-1">
+<div class="modal fade" id="spareModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Add Color</h5>
+        <h5 class="modal-title">Add Device Spare</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <form id="addColorForm">
+        <form id="addSpareForm">
+           <div class=" mb-3">
+    <label class="form-label">Category Name</label>
+<select name="spare_category_id" id="spare_category_id" class="select2 form-control" required <?= $edit_model ? 'disabled' : '' ?>>
+                                <option value="">Select Category</option>
+                                <?php
+                                $res = $conn->query("SELECT * FROM device_categories");
+                                while ($cat = $res->fetch_assoc()) {
+                                    $selected = ($selected_category_id == $cat['id']) ? 'selected' : '';
+                                    echo "<option value='{$cat['id']}' $selected>{$cat['category_name']}</option>";
+                                }
+                                ?>
+                            </select>  </div>
           <div class="mb-3">
-            <label class="form-label">Color Name</label>
-            <input type="text" name="color_name" class="form-control" required>
+            <label class="form-label">Spare Name</label>
+            <input type="text" name="spare_nametxt" id="spare_nametxt" class="form-control" required>
           </div>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Add Color</button>
+          <button type="submit" class="btn btn-primary">Add Spare</button>
         </form>
       </div>
     </div>
   </div>
 </div>
+
+
 
 <div class="modal fade" id="model_name" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
@@ -287,6 +315,7 @@ if ($edit_id) {
   </div>
 </div>
 
+<input type="hidden" name="model_id" value="<?= $edit_model['id'] ?? '' ?>">
 
 
 <!-- Delete Modal -->
@@ -312,51 +341,121 @@ if ($edit_id) {
 <?php include("includes/footer.php"); ?>
 <script>
 
-function loadgetModelOptions(categoryId = '') {
+
+// function loadSparesOptions(categoryId = '') {
+//   if (!categoryId) return;
+
+//   $.getJSON('get_spares.php', { category_id: categoryId }, function (response) {
+//     const spareSelect = $('#spareSelect');
+//     spareSelect.html('<option value="">-- Select Spare --</option>');
+//     response.data.forEach(spare => {
+//       spareSelect.append(`<option value="${spare.id}">${spare.name}</option>`);
+//     });
+//   });
+// }
+
+
+function loadSparesOptions(categoryId = '', selectedSpareId = '') {
+  if (!categoryId) return;
+
+  $.getJSON('get_spares.php', { category_id: categoryId }, function (response) {
+    const spareSelect = $('#spareSelect');
+    spareSelect.html('<option value="">-- Select Spare --</option>');
+    response.data.forEach(spare => {
+      const selected = (spare.id == selectedSpareId) ? 'selected' : '';
+      spareSelect.append(`<option value="${spare.id}" ${selected}>${spare.name}</option>`);
+    });
+  });
+}
+
+
+
+function loadgetModelOptions(categoryId = '', selectedModelId = '') {
   if (!categoryId) return;
 
   $.getJSON('get_models.php', { category_id: categoryId }, function (response) {
     const modelSelect = $('#modelSelect');
     modelSelect.html('<option value="">-- Select Model --</option>');
     response.data.forEach(model => {
-      modelSelect.append(`<option value="${model.id}">${model.name}</option>`);
+      const selected = (model.id == selectedModelId) ? 'selected' : '';
+      modelSelect.append(`<option value="${model.id}" ${selected}>${model.name}</option>`);
     });
   });
 }
 
+
+
+
+
+// function loadgetModelOptions(categoryId = '') {
+//   if (!categoryId) return;
+
+//   $.getJSON('get_models.php', { category_id: categoryId }, function (response) {
+//     const modelSelect = $('#modelSelect');
+//     modelSelect.html('<option value="">-- Select Model --</option>');
+//     response.data.forEach(model => {
+//       modelSelect.append(`<option value="${model.id}">${model.name}</option>`);
+//     });
+//   });
+// }
+
+
 $(document).ready(function () {
+
+
+const categoryId = "<?= $selected_category_id ?>";
+  const selectedModelId = "<?= $edit_model['model_name'] ?? '' ?>";
+  const selectedSpareId = "<?= $edit_model['spare_id'] ?? '' ?>";
+
+  if (categoryId) {
+    loadgetModelOptions(categoryId, selectedModelId);
+    loadSparesOptions(categoryId, selectedSpareId);
+  }
+
+  
 
 
 $('select[name="model_category_id"]').on('change', function () {
   const selectedCategoryId = $(this).val();
   loadgetModelOptions(selectedCategoryId);
+    loadSparesOptions(selectedCategoryId);   // loads spares
+
 });
 
 
 
-  // Load model options
-  function loadModelOptions() {
-    $.getJSON('get_models.php', function (response) {
-      const modelSelect = $('#modelSelect');
-      modelSelect.html('<option value="">-- Select Model --</option>');
-      response.data.forEach(model => {
-        modelSelect.append(`<option value="${model.id}">${model.name}</option>`);
-      });
-    });
-  }
+  $('#addSpareForm').submit(function (e) {
+  e.preventDefault();
 
-  // Load color options
-  function loadColorOptions() {
-    $.getJSON('get_colors.php', function (response) {
-      const colorSelect = $('#colorSelect');
-      colorSelect.html('<option value="">-- Select Color --</option>');
-      response.data.forEach(color => {
-        colorSelect.append(`<option value="${color.id}">${color.name}</option>`);
-      });
-    });
+  $.ajax({
+    url: 'save_spare.php',
+    type: 'POST',
+    dataType: 'json',
+    data: {
+      spare_nametxt: $('#spare_nametxt').val(),
+      category_id: $('#spare_category_id').val()
+    },
+    success: function (response) {
+  if (response.status === 'success') {
+    loadSparesOptions();
+    $('#spareModal').modal('hide');
+    setTimeout(() => {
+      $('#spareSelect').val(response.model_id);
+    }, 300);
+    $('#addSpareForm')[0].reset();
+  } else {
+     console.log("Error: " + response.message);
   }
+    
+    },
+    error: function (xhr, status, error) {
+      console.error("AJAX failed:", error);
+    }
+  });
+});
 
-  // Handle Add Model Submit
+
+  
   $('#addModelForm').submit(function (e) {
     e.preventDefault();
     var modelName = $('input[name="model_nametxt"]').val();
@@ -373,7 +472,7 @@ $('select[name="model_category_id"]').on('change', function () {
     },
     success: function(response) {
         if (response.status === 'success') {
-    loadModelOptions();
+    loadgetModelOptions();
     $('#model_name').modal('hide');
     setTimeout(() => {
       $('#modelSelect').val(response.model_id);
@@ -386,70 +485,9 @@ $('select[name="model_category_id"]').on('change', function () {
     error: function(xhr, status, error) {
         console.error("AJAX failed:", error);
     }
-//      data: {
-//       model_name: modelName,
-//       model_category_id: categoryId
-//     },
-//       dataType: 'json',
-//       success: function (response) {
-//   console.log(response);
-//   if (response.status === 'success') {
-//     loadModelOptions();
-//     $('#model_name').modal('hide');
-//     setTimeout(() => {
-//       $('#modelSelect').val(response.model_id);
-//     }, 300);
-//     $('#addModelForm')[0].reset();
-//   } else {
-//      console.log("Error: " + response.message);
-//   }
-// },
-// error: function (xhr, status, error) {
-//   console.error("AJAX error:", error);
-//   console.log("AJAX failed: " + error);
-// }
 
-      // success: function (response) {
-        
-      //   if (response.status === 'success') {
-      //     loadModelOptions();
-      //     $('#model_name').modal('hide');
-      //     setTimeout(() => {
-      //       $('#modelSelect').val(response.model_id);
-      //     }, 300);
-      //     $('#addModelForm')[0].reset();
-      //   }
-      // }
     });
   });
-
-  // Handle Add Color Submit
-  $('#addColorForm').submit(function (e) {
-    e.preventDefault();
-    var colorName = $('input[name="color_name"]').val();
-
-    $.ajax({
-      url: 'add_color.php',
-      type: 'GET',
-      data: { color_name: colorName },
-      dataType: 'json',
-      success: function (response) {
-        if (response.status === 'success') {
-          loadColorOptions();
-          $('#colorModal').modal('hide');
-          setTimeout(() => {
-            $('#colorSelect').val(response.color_id);
-          }, 300);
-          $('#addColorForm')[0].reset();
-        }
-      }
-    });
-  });
-
-  // Initial load
-  loadModelOptions();
-  loadColorOptions();
-});
 
 
 
@@ -466,14 +504,13 @@ $('select[name="model_category_id"]').on('change', function () {
   $('#confirmDeleteBtn').click(function () {
     if (deleteModelId) {
       $.post(window.location.href, { delete_model: deleteModelId }, function (res) {
-        const response = JSON.parse(res);
-        if (response.status === 'success') {
-          $('a[data-id="' + deleteModelId + '"]').closest('tr').remove();
-          $('#deleteModal').modal('hide');
-        } else {
-          alert('Delete failed.');
-        }
+      $('#deleteModal').modal('hide');
+       window.location.reload(); 
+
+       
+       
       });
     }
   });
+    });
 </script>
